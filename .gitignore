@@ -1,0 +1,12 @@
+node_modules/
+.vercel/
+.env
+.env.*
+!.env.example
+
+# Тяжёлые файлы карты в Git НЕ кладём (GitHub блокирует файлы >100 МБ).
+# Они хостятся отдельно (Cloudflare R2), а в HTML указаны в MAP_URL / PROPS_URL.
+metrorp_q_underground_west.bsp
+found_models/metro_props.bin
+found_models/metro_props.bin.bak-*
+found_models/metro_props.bin.new

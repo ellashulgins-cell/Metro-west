@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "name": "metro-rp-viewer",
+  "description": "3D-просмотрщик карты Metro RP с серверной защитой паролем и админкой (Vercel Edge Middleware + KV)",
+  "dependencies": {
+    "@vercel/edge": "^1.2.1",
+    "@vercel/kv": "^2.0.0"
+  }
+}
