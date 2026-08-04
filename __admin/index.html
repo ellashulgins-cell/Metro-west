@@ -34,6 +34,17 @@ th{color:#8a8478;font-weight:500}
 .pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:10px;background:#2b2620;color:#c8bfae}
 .pill.err{background:#3a1818;color:#e88}.pill.ok{background:#1a3a1a;color:#8c8}
 .time{color:#666;font-size:11px;font-family:ui-monospace,Consolas,monospace}
+.rrGroup{border:1px solid #2c2820;border-radius:8px;margin-bottom:8px;overflow:hidden}
+.rrGroup.open .rrGroupBody{display:block}
+.rrGroupHead{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#221e19;cursor:pointer;user-select:none}
+.rrGroupHead:hover{background:#28221c}
+.rrGroupHead .arrow{color:#ffb387;font-size:12px;width:12px;transition:transform 0.15s}
+.rrGroup.open .rrGroupHead .arrow{transform:rotate(90deg)}
+.rrGroupHead .name{flex:1;color:#eee;font-weight:600;font-size:13px}
+.rrGroupHead .count{color:#8a8478;font-size:11px}
+.rrGroupBody{display:none;padding:6px 10px;background:#1a1815;max-height:400px;overflow-y:auto}
+.rrGroupBody table{margin:0}
+.rrGroupBody th{position:sticky;top:0;background:#1a1815;z-index:1}
 </style>
 </head>
 <body>
@@ -147,8 +158,7 @@ th{color:#8a8478;font-weight:500}
 <span class="small" style="margin-left:auto;color:#c8bfae">Всего: <b id="rrTotalCount">0</b></span>
 </div>
 <div class="msg" id="rrDelMsg"></div>
-<table><thead><tr><th style="width:32px"></th><th>Пометка</th><th>Координаты</th><th>Добавлено</th><th></th></tr></thead>
-<tbody id="rrBody"></tbody></table>
+<div id="rrGroups"></div>
 </div>
 </div>
 
@@ -337,30 +347,88 @@ else setMsg('rrBulkMsg',r.data.error||'Ошибка',false);
 
 let _rrPoints=[];
 function _rrUpdateSelCount(){
-const n=document.querySelectorAll('#rrBody input.rrSel:checked').length;
+const n=document.querySelectorAll('#rrGroups input.rrSel:checked').length;
 $('rrSelCount').textContent=n;
+// синхронизируем групповые чекбоксы: полностью выбран/частично/не выбран
+document.querySelectorAll('.rrGroup').forEach(g=>{
+ const cbs=g.querySelectorAll('input.rrSel');
+ const sel=g.querySelectorAll('input.rrSel:checked').length;
+ const head=g.querySelector('input.rrGroupSel');
+ if(!head)return;
+ head.checked=sel>0 && sel===cbs.length;
+ head.indeterminate=sel>0 && sel<cbs.length;
+});
+}
+function _rrGroupKey(p){
+// Группируем по имени; если пусто — по trackId; иначе — одиночки в «Без пометки».
+if(p.name && p.name.trim()) return p.name.trim();
+if(p.trackId) return '#'+p.trackId.slice(0,10);
+return 'Без пометки';
 }
 async function loadReroute(){
 const r=await api('/api/admin?action=reroute');
-const body=$('rrBody');body.innerHTML='';
+const wrap=$('rrGroups');wrap.innerHTML='';
 if(!r.ok){setMsg('rrMsg',r.data.error||'Не удалось загрузить',false);return}
 _rrPoints=(r.data.points||[]).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 $('rrTotalCount').textContent=_rrPoints.length;
+if(!_rrPoints.length){wrap.innerHTML='<div class="small" style="padding:12px">Пока пусто. Импортируй точки выше.</div>';_rrUpdateSelCount();return}
+// Собираем группы, сохраняя порядок первого появления имени.
+const groups=new Map();
 for(const p of _rrPoints){
-const tr=document.createElement('tr');
-tr.innerHTML=`<td><input type="checkbox" class="rrSel" data-id="${esc(p.id)}"></td><td>${esc(p.name||'—')}</td><td class="time">${p.x.toFixed(0)} ${p.y.toFixed(0)} ${p.z.toFixed(0)}</td><td class="time">${fmtAgo(p.createdAt)}</td>`;
-const td=document.createElement('td');
-const del=document.createElement('button');del.className='danger';del.textContent='✕';
-del.onclick=async()=>{const rd=await api('/api/admin?action=reroute&id='+encodeURIComponent(p.id),{method:'DELETE'});if(rd.ok)loadReroute()};
-td.appendChild(del);tr.appendChild(td);body.appendChild(tr);
+ const k=_rrGroupKey(p);
+ if(!groups.has(k)) groups.set(k,[]);
+ groups.get(k).push(p);
 }
-body.querySelectorAll('input.rrSel').forEach(cb=>cb.addEventListener('change',_rrUpdateSelCount));
+for(const [name,pts] of groups){
+ const g=document.createElement('div');g.className='rrGroup';
+ // Заголовок
+ const head=document.createElement('div');head.className='rrGroupHead';
+ head.innerHTML=`<span class="arrow">▶</span>
+  <input type="checkbox" class="rrGroupSel" onclick="event.stopPropagation()">
+  <span class="name">${esc(name)}</span>
+  <span class="count">${pts.length} точ.</span>`;
+ const delBtn=document.createElement('button');delBtn.className='danger';delBtn.textContent='Удалить трек';
+ delBtn.style.marginLeft='auto';
+ delBtn.onclick=async(e)=>{
+  e.stopPropagation();
+  if(!confirm(`Удалить весь трек «${name}» (${pts.length} точек)?`))return;
+  const ids=pts.map(p=>p.id);
+  const r=await api('/api/admin?action=reroute&ids='+encodeURIComponent(ids.join(',')),{method:'DELETE'});
+  if(r.ok){setMsg('rrDelMsg',`Удалён трек «${name}» (${r.data.removed})`,true);loadReroute()}
+  else setMsg('rrDelMsg',r.data.error||'Ошибка',false);
+ };
+ head.appendChild(delBtn);
+ head.onclick=()=>g.classList.toggle('open');
+ g.appendChild(head);
+ // Тело — таблица точек с чекбоксами
+ const bodyDiv=document.createElement('div');bodyDiv.className='rrGroupBody';
+ const table=document.createElement('table');
+ table.innerHTML=`<thead><tr><th style="width:32px"></th><th>Координаты</th><th>Добавлено</th><th></th></tr></thead>`;
+ const tb=document.createElement('tbody');
+ for(const p of pts){
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td><input type="checkbox" class="rrSel" data-id="${esc(p.id)}"></td><td class="time">${p.x.toFixed(0)} ${p.y.toFixed(0)} ${p.z.toFixed(0)}</td><td class="time">${fmtAgo(p.createdAt)}</td>`;
+  const td=document.createElement('td');
+  const del=document.createElement('button');del.className='danger';del.textContent='✕';
+  del.onclick=async(e)=>{e.stopPropagation();const rd=await api('/api/admin?action=reroute&id='+encodeURIComponent(p.id),{method:'DELETE'});if(rd.ok)loadReroute()};
+  td.appendChild(del);tr.appendChild(td);tb.appendChild(tr);
+ }
+ table.appendChild(tb);bodyDiv.appendChild(table);g.appendChild(bodyDiv);
+ // Групповой чекбокс — тумблер для всех точек внутри
+ const groupCb=head.querySelector('input.rrGroupSel');
+ groupCb.addEventListener('change',()=>{
+  bodyDiv.querySelectorAll('input.rrSel').forEach(cb=>cb.checked=groupCb.checked);
+  _rrUpdateSelCount();
+ });
+ wrap.appendChild(g);
+}
+wrap.querySelectorAll('input.rrSel').forEach(cb=>cb.addEventListener('change',_rrUpdateSelCount));
 _rrUpdateSelCount();
 }
-$('btnRrSelAll').onclick=()=>{document.querySelectorAll('#rrBody input.rrSel').forEach(cb=>cb.checked=true);_rrUpdateSelCount()};
-$('btnRrSelNone').onclick=()=>{document.querySelectorAll('#rrBody input.rrSel').forEach(cb=>cb.checked=false);_rrUpdateSelCount()};
+$('btnRrSelAll').onclick=()=>{document.querySelectorAll('#rrGroups input.rrSel').forEach(cb=>cb.checked=true);_rrUpdateSelCount()};
+$('btnRrSelNone').onclick=()=>{document.querySelectorAll('#rrGroups input.rrSel').forEach(cb=>cb.checked=false);_rrUpdateSelCount()};
 $('btnRrDelSel').onclick=async()=>{
- const ids=[...document.querySelectorAll('#rrBody input.rrSel:checked')].map(cb=>cb.dataset.id);
+ const ids=[...document.querySelectorAll('#rrGroups input.rrSel:checked')].map(cb=>cb.dataset.id);
  if(!ids.length){setMsg('rrDelMsg','Ничего не выбрано',false);return}
  if(!confirm(`Удалить ${ids.length} точек?`))return;
  const r=await api('/api/admin?action=reroute&ids='+encodeURIComponent(ids.join(',')),{method:'DELETE'});
