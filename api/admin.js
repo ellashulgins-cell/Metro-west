@@ -130,9 +130,28 @@ export default async function handler(request){
       return jsonResp({ ok: true, added, total: arr.length });
     }
     if(request.method === 'DELETE'){
-      const id = url.searchParams.get('id');
       const list = (await kv.get('reroute_points')) || [];
-      const arr = Array.isArray(list) ? list.filter(p => p.id !== id) : [];
+      const arrIn = Array.isArray(list) ? list : [];
+      // ?all=1 — снести всё разом.
+      if(url.searchParams.get('all') === '1'){
+        const removed = arrIn.length;
+        await kv.set('reroute_points', []);
+        await audit(kv, 'reroute_cleared', { ip, removed });
+        return jsonResp({ ok: true, removed, total: 0 });
+      }
+      // ?ids=a,b,c — удалить конкретный список.
+      const idsParam = url.searchParams.get('ids');
+      if(idsParam){
+        const idSet = new Set(idsParam.split(',').filter(Boolean));
+        const arr = arrIn.filter(p => !idSet.has(p.id));
+        const removed = arrIn.length - arr.length;
+        await kv.set('reroute_points', arr);
+        await audit(kv, 'reroute_removed_many', { ip, removed });
+        return jsonResp({ ok: true, removed, total: arr.length });
+      }
+      // Одиночное удаление по id (обратная совместимость).
+      const id = url.searchParams.get('id');
+      const arr = arrIn.filter(p => p.id !== id);
       await kv.set('reroute_points', arr);
       await audit(kv, 'reroute_removed', { ip, id });
       return jsonResp({ ok: true, total: arr.length });

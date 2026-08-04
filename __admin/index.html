@@ -125,6 +125,10 @@ th{color:#8a8478;font-weight:500}
 <div class="card">
 <h2>Массовый импорт (запись прохождения)</h2>
 <div class="small" style="margin-bottom:8px">Пройди маршрут в игре: <b>bind KEY "getpos"</b>, периодически жми клавишу. Вставь строки «setpos X Y Z» сюда:</div>
+<div class="row" style="margin-bottom:8px">
+<input id="rrBulkName" placeholder="Название трека (напр. Самсара → Ганза)" style="flex:1">
+</div>
+<div class="small" style="margin-bottom:6px;color:#c8bfae">Пометка применится ко всем точкам этого импорта — по ней потом видно, откуда координаты.</div>
 <textarea id="rrBulk" placeholder="setpos 1234 -567 89&#10;setpos 1250 -580 90"></textarea>
 <div class="row" style="margin-top:8px">
 <label class="small" style="display:flex;gap:6px;align-items:center;color:#c8bfae"><input type="checkbox" id="rrThin" checked style="flex:0 0 auto">прореживать</label>
@@ -135,7 +139,15 @@ th{color:#8a8478;font-weight:500}
 <div class="card">
 <h2>Существующие reroute-точки</h2>
 <div class="small" style="margin-bottom:8px">Клиенты добавляют их в граф маршрутизации — маршрут в «строгом» режиме проходит через них.</div>
-<table><thead><tr><th>Пометка</th><th>Координаты</th><th>Добавлено</th><th></th></tr></thead>
+<div class="row" style="margin-bottom:8px;gap:8px;flex-wrap:wrap">
+<button id="btnRrSelAll">Выбрать все</button>
+<button id="btnRrSelNone">Снять выбор</button>
+<button class="danger" id="btnRrDelSel">Удалить выбранные (<span id="rrSelCount">0</span>)</button>
+<button class="danger" id="btnRrDelAll">🗑 Удалить всё</button>
+<span class="small" style="margin-left:auto;color:#c8bfae">Всего: <b id="rrTotalCount">0</b></span>
+</div>
+<div class="msg" id="rrDelMsg"></div>
+<table><thead><tr><th style="width:32px"></th><th>Пометка</th><th>Координаты</th><th>Добавлено</th><th></th></tr></thead>
 <tbody id="rrBody"></tbody></table>
 </div>
 </div>
@@ -316,25 +328,52 @@ if($('rrThin').checked){
 const T=100*100; out=[]; let last=null;
 for(const p of pts){if(!last||(p.x-last.x)**2+(p.y-last.y)**2+(p.z-last.z)**2>T){out.push(p);last=p}}
 }
+const trackName=$('rrBulkName').value.trim();
+if(trackName) out=out.map(p=>({...p,name:trackName}));
 const r=await api('/api/admin?action=reroute',{method:'POST',body:JSON.stringify({points:out})});
-if(r.ok){$('rrBulk').value='';setMsg('rrBulkMsg',`Импортировано ${r.data.added} из ${pts.length}`,true);loadReroute()}
+if(r.ok){$('rrBulk').value='';$('rrBulkName').value='';setMsg('rrBulkMsg',`Импортировано ${r.data.added} из ${pts.length}`,true);loadReroute()}
 else setMsg('rrBulkMsg',r.data.error||'Ошибка',false);
 };
 
+let _rrPoints=[];
+function _rrUpdateSelCount(){
+const n=document.querySelectorAll('#rrBody input.rrSel:checked').length;
+$('rrSelCount').textContent=n;
+}
 async function loadReroute(){
 const r=await api('/api/admin?action=reroute');
 const body=$('rrBody');body.innerHTML='';
 if(!r.ok){setMsg('rrMsg',r.data.error||'Не удалось загрузить',false);return}
-const rows=(r.data.points||[]).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-for(const p of rows){
+_rrPoints=(r.data.points||[]).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+$('rrTotalCount').textContent=_rrPoints.length;
+for(const p of _rrPoints){
 const tr=document.createElement('tr');
-tr.innerHTML=`<td>${esc(p.name||'—')}</td><td class="time">${p.x.toFixed(0)} ${p.y.toFixed(0)} ${p.z.toFixed(0)}</td><td class="time">${fmtAgo(p.createdAt)}</td>`;
+tr.innerHTML=`<td><input type="checkbox" class="rrSel" data-id="${esc(p.id)}"></td><td>${esc(p.name||'—')}</td><td class="time">${p.x.toFixed(0)} ${p.y.toFixed(0)} ${p.z.toFixed(0)}</td><td class="time">${fmtAgo(p.createdAt)}</td>`;
 const td=document.createElement('td');
 const del=document.createElement('button');del.className='danger';del.textContent='✕';
 del.onclick=async()=>{const rd=await api('/api/admin?action=reroute&id='+encodeURIComponent(p.id),{method:'DELETE'});if(rd.ok)loadReroute()};
 td.appendChild(del);tr.appendChild(td);body.appendChild(tr);
 }
+body.querySelectorAll('input.rrSel').forEach(cb=>cb.addEventListener('change',_rrUpdateSelCount));
+_rrUpdateSelCount();
 }
+$('btnRrSelAll').onclick=()=>{document.querySelectorAll('#rrBody input.rrSel').forEach(cb=>cb.checked=true);_rrUpdateSelCount()};
+$('btnRrSelNone').onclick=()=>{document.querySelectorAll('#rrBody input.rrSel').forEach(cb=>cb.checked=false);_rrUpdateSelCount()};
+$('btnRrDelSel').onclick=async()=>{
+ const ids=[...document.querySelectorAll('#rrBody input.rrSel:checked')].map(cb=>cb.dataset.id);
+ if(!ids.length){setMsg('rrDelMsg','Ничего не выбрано',false);return}
+ if(!confirm(`Удалить ${ids.length} точек?`))return;
+ const r=await api('/api/admin?action=reroute&ids='+encodeURIComponent(ids.join(',')),{method:'DELETE'});
+ if(r.ok){setMsg('rrDelMsg',`Удалено ${r.data.removed}`,true);loadReroute()}
+ else setMsg('rrDelMsg',r.data.error||'Ошибка',false);
+};
+$('btnRrDelAll').onclick=async()=>{
+ if(!_rrPoints.length){setMsg('rrDelMsg','Уже пусто',false);return}
+ if(!confirm(`Удалить ВСЕ ${_rrPoints.length} точек? Это нельзя откатить.`))return;
+ const r=await api('/api/admin?action=reroute&all=1',{method:'DELETE'});
+ if(r.ok){setMsg('rrDelMsg',`Удалено всё (${r.data.removed})`,true);loadReroute()}
+ else setMsg('rrDelMsg',r.data.error||'Ошибка',false);
+};
 
 async function loadAudit(){
 const r=await api('/api/admin?action=audit');
