@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Metro RP — Админка</title>
+<title>Metro RP West — Админка</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><radialGradient id='g' cx='50%25' cy='50%25' r='75%25'><stop offset='0%25' stop-color='%23c62828'/><stop offset='60%25' stop-color='%238b1e1e'/><stop offset='100%25' stop-color='%232b0a0a'/></radialGradient></defs><rect width='64' height='64' fill='url(%23g)'/><path d='M8 54 V14 L20 14 L32 38 L44 14 L56 14 V54 L46 54 V30 L34 52 L30 52 L18 30 V54 Z' fill='%23111'/></svg>">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#111;color:#e8e2d6;font-family:system-ui,sans-serif;min-height:100vh;padding:24px 16px;line-height:1.5}
@@ -37,17 +38,17 @@ th{color:#8a8478;font-weight:500}
 </head>
 <body>
 <div class="wrap">
-<h1>Metro RP — Админка</h1>
+<h1>Metro RP West — Админка</h1>
 <div class="mut">Смена пароля, общие метки, reroute-точки, аудит-лог.</div>
 
-<div id="login" class="card">
+<form id="login" class="card" autocomplete="off" onsubmit="return false">
 <h2>Вход в админку</h2>
 <div class="row">
-<input type="password" id="adminPw" placeholder="Пароль администратора" autocomplete="current-password">
-<button class="primary" id="btnLogin">Войти</button>
+<input type="password" id="adminPw" placeholder="Пароль администратора" autocomplete="off">
+<button class="primary" id="btnLogin" type="submit">Войти</button>
 </div>
 <div class="msg" id="loginMsg"></div>
-</div>
+</form>
 
 <div id="panel" class="hide">
 <div class="tabs">
@@ -63,8 +64,8 @@ th{color:#8a8478;font-weight:500}
 <div class="card">
 <h2>Сменить пароль сайта</h2>
 <div class="row">
-<input type="text" id="newPw" placeholder="Новый пароль (мин. 4 символа)">
-<button class="primary" id="btnSetPw">Сменить</button>
+<input type="text" id="newPw" placeholder="Новый пароль (мин. 4 символа)" autocomplete="off" data-lpignore="true" data-1p-ignore="true" name="site_new_password" spellcheck="false">
+<button class="primary" id="btnSetPw" type="button">Сменить</button>
 </div>
 <div class="small">Все текущие пользователи будут выкинуты на экран пароля в течение ~30 сек.</div>
 <div class="msg" id="pwMsg"></div>
@@ -75,7 +76,7 @@ th{color:#8a8478;font-weight:500}
 <div class="card">
 <h2>Добавить метку</h2>
 <div class="row">
-<input id="mName" placeholder="Название (напр. «Ящик с патронами»)">
+<input id="mName" placeholder="Название (напр. «Ящик с патронами»)" autocomplete="off" data-lpignore="true">
 <select id="mCat">
 <option value="loot">Лут</option>
 <option value="base">База</option>
@@ -83,14 +84,29 @@ th{color:#8a8478;font-weight:500}
 </select>
 </div>
 <div class="row" style="margin-top:8px">
-<input id="mCoords" placeholder="setpos X Y Z (из игры)">
-<button class="primary" id="btnAdd">Добавить</button>
+<input id="mCoords" placeholder="setpos X Y Z (из игры)" autocomplete="off" data-lpignore="true">
+<button class="primary" id="btnAdd" type="button">Добавить</button>
 </div>
 <div class="small">Скопируйте вывод <code>getpos</code> из консоли GMod и вставьте сюда.</div>
 <div class="msg" id="markerMsg"></div>
 </div>
 <div class="card">
 <h2>Существующие метки</h2>
+<div class="row" style="gap:8px;margin-bottom:8px;align-items:center">
+<label class="small" style="display:flex;gap:6px;align-items:center;color:#c8bfae;flex:0 0 auto">
+<input type="checkbox" id="fFilterCatEnabled" style="flex:0 0 auto"> по категории:
+</label>
+<select id="fFilterCat" style="max-width:180px" autocomplete="off">
+<option value="loot">Лут</option>
+<option value="base">База</option>
+<option value="transition">Переход</option>
+</select>
+<label class="small" style="display:flex;gap:6px;align-items:center;color:#c8bfae;flex:0 0 auto;margin-left:12px">
+<input type="checkbox" id="fFilterNameEnabled" style="flex:0 0 auto"> по названию:
+</label>
+<input type="text" id="fFilterName" placeholder="часть названия…" autocomplete="off" style="max-width:220px">
+<span id="fFilterCount" class="small" style="margin-left:auto;color:#8a8478"></span>
+</div>
 <table><thead><tr><th>Кат</th><th>Название</th><th>Координаты</th><th>Добавлено</th><th></th></tr></thead>
 <tbody id="markersBody"></tbody></table>
 </div>
@@ -208,33 +224,79 @@ if(r.ok){$('mName').value='';$('mCoords').value='';setMsg('markerMsg','Доба�
 else setMsg('markerMsg',r.data.error||'Ошибка',false);
 };
 
+// Кеш всех загруженных меток. Фильтр применяется в renderMarkers() → каждая
+// правка сохраняется точечно в _markersById[id] без общего reload — тем самым
+// правки других строк (не подтверждённые ✓) не сбрасываются.
+let _markersById = {};
+let _markersOrder = []; // id в порядке отображения
+
 async function loadMarkers(){
-const r=await api('/api/markers');
-const body=$('markersBody');body.innerHTML='';
-if(!r.ok){setMsg('markerMsg',r.data.error||'Не удалось загрузить',false);return}
-const rows=(r.data.markers||[]).slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
-for(const m of rows){
-const tr=document.createElement('tr');
-tr.innerHTML=`<td><select data-id="${esc(m.id)}" class="mCat"><option value="loot"${m.category==='loot'?' selected':''}>Лут</option><option value="base"${m.category==='base'?' selected':''}>База</option><option value="transition"${m.category==='transition'?' selected':''}>Переход</option></select></td><td><input class="mNameEdit" data-id="${esc(m.id)}" value="${esc(m.name)}" style="width:100%"></td><td class="time">${m.x.toFixed(0)} ${m.y.toFixed(0)} ${m.z.toFixed(0)}</td><td class="time">${fmtAgo(m.createdAt)}</td>`;
-const td=document.createElement('td');
-const save=document.createElement('button');save.textContent='✓';save.title='Сохранить';
-save.onclick=async()=>{
-const name=tr.querySelector('.mNameEdit').value.trim();
-const category=tr.querySelector('.mCat').value;
-if(!name){setMsg('markerMsg','Название не может быть пустым',false);return}
-const rd=await api('/api/markers',{method:'POST',body:JSON.stringify({id:m.id,name,category,x:m.x,y:m.y,z:m.z,note:m.note||''})});
-if(rd.ok){setMsg('markerMsg','Сохранено',true);loadMarkers()}
-else setMsg('markerMsg',rd.data.error||'Ошибка',false);
-};
-const del=document.createElement('button');del.className='danger';del.textContent='✕';del.style.marginLeft='4px';
-del.onclick=async()=>{
-if(!confirm('Удалить «'+m.name+'»?'))return;
-const rd=await api('/api/markers?id='+encodeURIComponent(m.id),{method:'DELETE'});
-if(rd.ok)loadMarkers();else setMsg('markerMsg',rd.data.error||'Ошибка удаления',false);
-};
-td.appendChild(save);td.appendChild(del);tr.appendChild(td);body.appendChild(tr);
+  const r=await api('/api/markers');
+  if(!r.ok){setMsg('markerMsg',r.data.error||'Не удалось загрузить',false);return}
+  _markersById={};
+  const rows=(r.data.markers||[]).slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  _markersOrder=rows.map(m=>{_markersById[m.id]=m;return m.id});
+  renderMarkers();
 }
+
+function renderMarkers(){
+  const body=$('markersBody'); body.innerHTML='';
+  const useCat=$('fFilterCatEnabled')?.checked;
+  const useName=$('fFilterNameEnabled')?.checked;
+  const catVal=$('fFilterCat')?.value;
+  const nameVal=($('fFilterName')?.value||'').trim().toLowerCase();
+  let shown=0;
+  for(const id of _markersOrder){
+    const m=_markersById[id]; if(!m)continue;
+    if(useCat && m.category!==catVal) continue;
+    if(useName && !String(m.name||'').toLowerCase().includes(nameVal)) continue;
+    shown++;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td><select data-id="${esc(m.id)}" class="mCat" autocomplete="off"><option value="loot"${m.category==='loot'?' selected':''}>Лут</option><option value="base"${m.category==='base'?' selected':''}>База</option><option value="transition"${m.category==='transition'?' selected':''}>Переход</option></select></td><td><input class="mNameEdit" data-id="${esc(m.id)}" value="${esc(m.name)}" style="width:100%" autocomplete="off" data-lpignore="true" data-1p-ignore="true" spellcheck="false"></td><td class="time">${m.x.toFixed(0)} ${m.y.toFixed(0)} ${m.z.toFixed(0)}</td><td class="time">${fmtAgo(m.createdAt)}</td>`;
+    const td=document.createElement('td');
+    const save=document.createElement('button');save.type='button';save.textContent='✓';save.title='Сохранить';
+    save.onclick=async(ev)=>{
+      ev.preventDefault();
+      const name=tr.querySelector('.mNameEdit').value.trim();
+      const category=tr.querySelector('.mCat').value;
+      if(!name){setMsg('markerMsg','Название не может быть пустым',false);return}
+      const rd=await api('/api/markers',{method:'POST',body:JSON.stringify({id:m.id,name,category,x:m.x,y:m.y,z:m.z,note:m.note||''})});
+      if(rd.ok){
+        // In-place: обновляем только эту запись в кеше, НЕ перерисовываем таблицу
+        // → другие строки с несохранёнными правками остаются как есть.
+        _markersById[m.id]={..._markersById[m.id],name,category,updatedAt:Date.now()};
+        setMsg('markerMsg','Сохранено «'+name+'»',true);
+        save.textContent='✓ OK';
+        setTimeout(()=>{save.textContent='✓'},1500);
+      } else setMsg('markerMsg',rd.data.error||'Ошибка',false);
+    };
+    const del=document.createElement('button');del.type='button';del.className='danger';del.textContent='✕';del.style.marginLeft='4px';
+    del.onclick=async(ev)=>{
+      ev.preventDefault();
+      if(!confirm('Удалить «'+m.name+'»?'))return;
+      const rd=await api('/api/markers?id='+encodeURIComponent(m.id),{method:'DELETE'});
+      if(rd.ok){
+        // In-place: убираем из кеша + строку, не трогая остальные inputs.
+        delete _markersById[m.id];
+        _markersOrder=_markersOrder.filter(x=>x!==m.id);
+        tr.remove();
+        setMsg('markerMsg','Удалено',true);
+      } else setMsg('markerMsg',rd.data.error||'Ошибка удаления',false);
+    };
+    td.appendChild(save);td.appendChild(del);tr.appendChild(td);body.appendChild(tr);
+  }
+  const c=$('fFilterCount'); if(c) c.textContent = `Показано: ${shown} из ${_markersOrder.length}`;
 }
+
+// Триггеры фильтров: перерисовать при любом изменении. Так как фильтр только
+// скрывает/показывает строки, но НЕ трогает in-place кеш, никакие правки не
+// теряются (если ты правил метку и не сохранил — переключение фильтра сбросит
+// нередактированное значение до кешированного; но это ожидаемо).
+['fFilterCatEnabled','fFilterCat','fFilterNameEnabled','fFilterName'].forEach(id=>{
+  const el=$(id); if(!el) return;
+  el.addEventListener('input', renderMarkers);
+  el.addEventListener('change', renderMarkers);
+});
 
 $('btnRrAdd').onclick=async()=>{
 const p=parseGetpos($('rrCoords').value);
