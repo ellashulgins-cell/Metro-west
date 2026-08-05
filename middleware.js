@@ -55,7 +55,8 @@ function loginResponse(errText){
   const err = errText ? String(errText).replace(/</g,'&lt;') : '';
   const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Доступ к карте — Metro RP</title>
+<title>Metro RP West</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23800000'/%3E%3Ctext x='50' y='75' font-size='70' font-weight='bold' text-anchor='middle' fill='%23000' font-family='sans-serif'%3EM%3C/text%3E%3C/svg%3E">
 <style>*{margin:0;padding:0;box-sizing:border-box}
 body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#111,#1c1b18 50%,#2e2c26);font-family:system-ui,sans-serif;color:#fff}
 .b{border:2px solid #555248;border-radius:16px;padding:44px 52px;text-align:center;background:rgba(255,255,255,.02);backdrop-filter:blur(10px)}
@@ -67,7 +68,7 @@ button{margin-top:16px;display:block;width:100%;padding:11px;background:linear-g
 button:hover{transform:scale(1.02)}
 .e{color:#e55;font-size:12px;min-height:16px;margin-top:12px}</style></head>
 <body><form class="b" method="POST" action="/__auth" autocomplete="off">
-<h1>Metro RP — карта</h1><p>Введите пароль доступа</p>
+<h1>Metro RP West</h1><p>Введите пароль доступа</p>
 <input type="password" name="password" placeholder="Пароль" autofocus>
 <button type="submit">Войти</button>
 <div class="e">${err}</div></form></body></html>`;
