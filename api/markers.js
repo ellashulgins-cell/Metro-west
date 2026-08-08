@@ -33,9 +33,33 @@ export default async function handler(request){
     let body;
     try{ body = await request.json() }catch(e){ return jsonResp({error:'bad json'}, 400) }
     if(!body || typeof body !== 'object') return jsonResp({error:'bad payload'}, 400);
+
+    // Поддержка массового сидирования баз/переходов
+    if(Array.isArray(body.seedBatch)){
+      const arr = await readAll(kv);
+      let changed = false;
+      for(const sb of body.seedBatch){
+        if(!sb.id || !sb.name || !sb.category) continue;
+        if(!arr.some(m => m.id === sb.id || m.name === sb.name)){
+          arr.push({
+            id: String(sb.id),
+            name: String(sb.name).slice(0, 80),
+            category: String(sb.category).slice(0, 40),
+            x: Number(sb.x), y: Number(sb.y), z: Number(sb.z),
+            note: '',
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          });
+          changed = true;
+        }
+      }
+      if(changed) await writeAll(kv, arr);
+      return jsonResp({ ok: true, markers: arr });
+    }
+
     const id = String(body.id || Math.random().toString(36).slice(2, 12));
     const name = String(body.name || '').slice(0, 80);
-    const category = ['loot','base','transition'].includes(body.category) ? body.category : 'loot';
+    const category = String(body.category || 'loot').slice(0, 40).trim().toLowerCase() || 'loot';
     const x = Number(body.x), y = Number(body.y), z = Number(body.z);
     const note = String(body.note || '').slice(0, 200);
     if(!name || !isFinite(x) || !isFinite(y) || !isFinite(z))

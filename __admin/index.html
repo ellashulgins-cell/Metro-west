@@ -17,13 +17,17 @@ h1{font-size:22px;margin-bottom:6px;background:linear-gradient(135deg,#f60,#f85)
 .card{background:#1a1815;border:1px solid #2c2820;border-radius:10px;padding:18px;margin-bottom:14px}
 .card h2{font-size:14px;color:#ffb387;margin-bottom:10px;font-weight:600}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-input,select,button,textarea{background:#0f0e0c;border:1px solid #3a352d;color:#e8e2d6;padding:8px 12px;border-radius:6px;font-size:13px;font-family:inherit}
-input,select,textarea{min-width:0;flex:1}
+input,textarea{background:#0f0e0c;border:1px solid #3a352d;color:#e8e2d6;padding:8px 12px;border-radius:6px;font-size:13px;font-family:inherit;min-width:0;flex:1}
+select{background-color:#0f0e0c;color:#e8e2d6;border:1px solid #3a352d;padding:8px 12px;border-radius:6px;font-size:13px;font-family:inherit;outline:none;cursor:pointer;transition:border-color .2s;min-width:0;flex:1}
+select:focus{border-color:#f60}
+option{background:#1a1815;color:#e8e2d6;padding:8px}
 textarea{width:100%;font-family:ui-monospace,Consolas,monospace;font-size:12px;min-height:100px;resize:vertical}
-button{cursor:pointer;background:#2b2620;border-color:#4a4238;transition:.15s;flex:0 0 auto}
-button:hover{background:#3a322a;color:#ffb387;border-color:#f60}
-button.primary{background:linear-gradient(135deg,#f60,#e55);border:none;color:#fff;font-weight:600}
-button.danger{border-color:#7a3030;color:#e88}
+button{cursor:pointer;background:#0f0e0c;border:1px solid #3a352d;color:#e8e2d6;padding:8px 16px;border-radius:6px;font-size:13px;font-family:inherit;transition:.15s;flex:0 0 auto}
+button:hover{background:#221e19;border-color:#5a5248;color:#ffb387}
+button.primary{background:linear-gradient(135deg,#f60,#e55);border:none;color:#fff;font-weight:600;padding:8px 16px;border-radius:6px}
+button.primary:hover{opacity:0.95;transform:scale(1.01)}
+button.danger{border-color:#7a3030;color:#e88;background:#1e0f0f}
+button.danger:hover{background:#301414;color:#faa}
 .msg{font-size:12px;color:#8a8478;margin-top:8px;min-height:16px}
 .msg.err{color:#e66}.msg.ok{color:#8c8}
 table{width:100%;border-collapse:collapse;margin-top:8px}
@@ -88,10 +92,11 @@ th{color:#8a8478;font-weight:500}
 <h2>Добавить метку</h2>
 <div class="row">
 <input id="mName" placeholder="Название (напр. «Ящик с патронами»)" autocomplete="off" data-lpignore="true">
-<select id="mCat">
-<option value="loot">Лут</option>
-<option value="base">База</option>
-<option value="transition">Переход</option>
+<select id="mCat" style="max-width:200px;padding:10px;background:#1a1a1e;color:#fff;border:1px solid #444;border-radius:8px" autocomplete="off">
+<option value="база">База</option>
+<option value="лут">Лут</option>
+<option value="переход">Переход</option>
+<option value="проход">Проход</option>
 </select>
 </div>
 <div class="row" style="margin-top:8px">
@@ -107,10 +112,11 @@ th{color:#8a8478;font-weight:500}
 <label class="small" style="display:flex;gap:6px;align-items:center;color:#c8bfae;flex:0 0 auto">
 <input type="checkbox" id="fFilterCatEnabled" style="flex:0 0 auto"> по категории:
 </label>
-<select id="fFilterCat" style="max-width:180px" autocomplete="off">
-<option value="loot">Лут</option>
-<option value="base">База</option>
-<option value="transition">Переход</option>
+<select id="fFilterCat" style="max-width:180px;padding:9px;background:#1a1a1e;color:#fff;border:1px solid #444;border-radius:8px" autocomplete="off">
+<option value="база">База</option>
+<option value="лут">Лут</option>
+<option value="переход">Переход</option>
+<option value="проход">Проход</option>
 </select>
 <label class="small" style="display:flex;gap:6px;align-items:center;color:#c8bfae;flex:0 0 auto;margin-left:12px">
 <input type="checkbox" id="fFilterNameEnabled" style="flex:0 0 auto"> по названию:
@@ -124,7 +130,7 @@ th{color:#8a8478;font-weight:500}
 </div>
 
 <div id="tab-reroute" class="hide">
-<div class="card">
+<div class="card" style="display:none">
 <h2>Добавить reroute-точку (одна)</h2>
 <div class="row">
 <input id="rrName" placeholder="Пометка">
@@ -265,49 +271,49 @@ function renderMarkers(){
   const body=$('markersBody'); body.innerHTML='';
   const useCat=$('fFilterCatEnabled')?.checked;
   const useName=$('fFilterNameEnabled')?.checked;
-  const catVal=$('fFilterCat')?.value;
-  const nameVal=($('fFilterName')?.value||'').trim().toLowerCase();
-  let shown=0;
-  for(const id of _markersOrder){
-    const m=_markersById[id]; if(!m)continue;
-    if(useCat && m.category!==catVal) continue;
-    if(useName && !String(m.name||'').toLowerCase().includes(nameVal)) continue;
+   const catVal=($('fFilterCat')?.value||'').trim().toLowerCase();
+   const nameVal=($('fFilterName')?.value||'').trim().toLowerCase();
+   let shown=0;
+   for(const id of _markersOrder){
+     const m=_markersById[id]; if(!m)continue;
+     if(useCat && String(m.category||'').trim().toLowerCase()!==catVal) continue;
+     if(useName && !String(m.name||'').toLowerCase().includes(nameVal)) continue;
     shown++;
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td><select data-id="${esc(m.id)}" class="mCat" autocomplete="off"><option value="loot"${m.category==='loot'?' selected':''}>Лут</option><option value="base"${m.category==='base'?' selected':''}>База</option><option value="transition"${m.category==='transition'?' selected':''}>Переход</option></select></td><td><input class="mNameEdit" data-id="${esc(m.id)}" value="${esc(m.name)}" style="width:100%" autocomplete="off" data-lpignore="true" data-1p-ignore="true" spellcheck="false"></td><td class="time"><input class="mCoordsEdit" style="width:100%;font-family:ui-monospace,Consolas,monospace;font-size:11px" value="${m.x.toFixed(0)} ${m.y.toFixed(0)} ${m.z.toFixed(0)}" autocomplete="off" data-lpignore="true" spellcheck="false" placeholder="X Y Z"></td><td class="time">${fmtAgo(m.createdAt)}</td>`;
-    const td=document.createElement('td');
-    const save=document.createElement('button');save.type='button';save.textContent='✓';save.title='Сохранить';
-    save.onclick=async(ev)=>{
-      ev.preventDefault();
-      const name=tr.querySelector('.mNameEdit').value.trim();
-      const category=tr.querySelector('.mCat').value;
-      const coordsRaw=tr.querySelector('.mCoordsEdit').value.trim();
-      if(!name){setMsg('markerMsg','Название не может быть пустым',false);return}
-      // Парсим координаты — принимаем формат "X Y Z" или "setpos X Y Z"
-      const p=parseGetpos(coordsRaw);
-      if(!p){setMsg('markerMsg','Некорректные координаты (нужны 3 числа)',false);return}
-      const rd=await api('/api/markers',{method:'POST',body:JSON.stringify({id:m.id,name,category,x:p.x,y:p.y,z:p.z,note:m.note||''})});
-      if(rd.ok){
-        _markersById[m.id]={..._markersById[m.id],name,category,x:p.x,y:p.y,z:p.z,updatedAt:Date.now()};
-        setMsg('markerMsg','Сохранено «'+name+'»',true);
-        save.textContent='✓ OK';
-        setTimeout(()=>{save.textContent='✓'},1500);
-      } else setMsg('markerMsg',rd.data.error||'Ошибка',false);
-    };
-    const del=document.createElement('button');del.type='button';del.className='danger';del.textContent='✕';del.style.marginLeft='4px';
-    del.onclick=async(ev)=>{
-      ev.preventDefault();
-      if(!confirm('Удалить «'+m.name+'»?'))return;
-      const rd=await api('/api/markers?id='+encodeURIComponent(m.id),{method:'DELETE'});
-      if(rd.ok){
-        // In-place: убираем из кеша + строку, не трогая остальные inputs.
-        delete _markersById[m.id];
-        _markersOrder=_markersOrder.filter(x=>x!==m.id);
-        tr.remove();
-        setMsg('markerMsg','Удалено',true);
-      } else setMsg('markerMsg',rd.data.error||'Ошибка удаления',false);
-    };
-    td.appendChild(save);td.appendChild(del);tr.appendChild(td);body.appendChild(tr);
+     const tr=document.createElement('tr');
+      const isProtectedBase = false; // Разрешаем редактировать и базы
+      tr.innerHTML=`<td><select class="mCatEdit" data-id="${esc(m.id)}" style="width:100%;padding:4px;background:#1a1a1e;color:#fff;border:1px solid #444;border-radius:4px" autocomplete="off"><option value="база"${m.category==='база'||m.category==='base'?' selected':''}>База</option><option value="лут"${m.category==='лут'||m.category==='loot'?' selected':''}>Лут</option><option value="переход"${m.category==='переход'||m.category==='transition'?' selected':''}>Переход</option><option value="проход"${m.category==='проход'||m.category==='passage'?' selected':''}>Проход</option></select></td><td><input class="mNameEdit" data-id="${esc(m.id)}" value="${esc(m.name)}" style="width:100%" autocomplete="off" data-lpignore="true" data-1p-ignore="true" spellcheck="false"></td><td class="time"><input class="mCoordsEdit" style="width:100%;font-family:ui-monospace,Consolas,monospace;font-size:11px" value="${m.x.toFixed(0)} ${m.y.toFixed(0)} ${m.z.toFixed(0)}" autocomplete="off" data-lpignore="true" spellcheck="false" placeholder="X Y Z"></td><td class="time">${fmtAgo(m.createdAt)}</td>`;
+      const td=document.createElement('td');
+      const save=document.createElement('button');save.type='button';save.textContent='✓';save.title='Сохранить';
+      save.onclick=async(ev)=>{
+       ev.preventDefault();
+       const name=tr.querySelector('.mNameEdit').value.trim();
+       const category=tr.querySelector('.mCatEdit').value.trim().toLowerCase()||'loot';
+       const coordsRaw=tr.querySelector('.mCoordsEdit').value.trim();
+       if(!name){setMsg('markerMsg','Название не может быть пустым',false);return}
+       const p=parseGetpos(coordsRaw);
+       if(!p){setMsg('markerMsg','Некорректные координаты (нужны 3 числа)',false);return}
+       const rd=await api('/api/markers',{method:'POST',body:JSON.stringify({id:m.id,name,category,x:p.x,y:p.y,z:p.z,note:m.note||''})});
+       if(rd.ok){
+         _markersById[m.id]={..._markersById[m.id],name,category,x:p.x,y:p.y,z:p.z,updatedAt:Date.now()};
+         setMsg('markerMsg','Сохранено «'+name+'»',true);
+         save.textContent='✓ OK';
+         setTimeout(()=>{save.textContent='✓'},1500);
+       } else setMsg('markerMsg',rd.data.error||'Ошибка',false);
+      };
+      const del=document.createElement('button');del.type='button';del.className='danger';del.textContent='✕';del.style.marginLeft='4px';
+      del.onclick=async(ev)=>{
+       ev.preventDefault();
+       if(!confirm('Удалить «'+m.name+'»?'))return;
+       const rd=await api('/api/markers?id='+encodeURIComponent(m.id),{method:'DELETE'});
+       if(rd.ok){
+         delete _markersById[m.id];
+         _markersOrder=_markersOrder.filter(x=>x!==m.id);
+         tr.remove();
+         setMsg('markerMsg','Удалено',true);
+       } else setMsg('markerMsg',rd.data.error||'Ошибка удаления',false);
+      };
+      td.appendChild(save);td.appendChild(del);
+      tr.appendChild(td);body.appendChild(tr);
   }
   const c=$('fFilterCount'); if(c) c.textContent = `Показано: ${shown} из ${_markersOrder.length}`;
 }

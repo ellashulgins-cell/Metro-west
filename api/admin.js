@@ -47,14 +47,21 @@ export default async function handler(request){
     }
     let body; try{ body = await request.json() }catch(e){ body = {} }
     const password = String((body && body.password) || '');
-    const want = process.env.ADMIN_PASSWORD || '';
+    let want = process.env.ADMIN_PASSWORD || '';
+    if(kv){
+      try{
+        const kvPass = await kv.get('admin_password');
+        if(kvPass && typeof kvPass === 'string' && kvPass.length > 0) want = kvPass;
+      }catch(e){}
+    }
     if(!want) return jsonResp({error:'ADMIN_PASSWORD не задан'}, 500);
     if(!safeEqual(password, want)){
       await audit(kv, 'login_failed', { ip });
       return jsonResp({error:'invalid', remaining: rl.remaining - 1}, 401);
     }
-    if(!kv) return jsonResp({error:'KV недоступен'}, 500);
-    const token = newSessionToken();
+     if(!kv) return jsonResp({error:'KV недоступен'}, 500);
+     try{ await kv.del('rl:login:' + rlIp); }catch(e){}
+     const token = newSessionToken();
     try{ await kv.set('as:' + token, '1', { ex: ADMIN_TTL_SECONDS }); }
     catch(e){ return jsonResp({error:'не удалось создать сессию'}, 500); }
     await audit(kv, 'login_ok', { ip });
