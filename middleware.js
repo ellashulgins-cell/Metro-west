@@ -51,6 +51,28 @@ async function getSitePassword(){
   return process.env.SITE_PASSWORD || null;
 }
 
+// Заголовки безопасности для собственных ответов middleware (страница пароля,
+// редирект, 429). Статику (карта/админка/api) покрывает блок headers в vercel.json.
+const SEC_HEADERS = {
+  'X-Frame-Options': 'DENY',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://huggingface.co https://*.huggingface.co https://*.hf.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+};
+
+// Rate-limit на ввод пароля сайта (по образцу admin-логина): 12 попыток/мин на IP.
+async function checkAuthRateLimit(request){
+  try{
+    const ip = (request.headers.get('x-forwarded-for')||'').split(',')[0].trim()
+             || request.headers.get('x-real-ip') || 'unknown';
+    const { kv } = await import('@vercel/kv');
+    const key = 'rl:site:' + ip;
+    const n = await kv.incr(key);
+    if(n === 1) await kv.expire(key, 60);
+    return n <= 12;
+  }catch(e){ return true; } // KV недоступен — не блокируем вход
+}
+
 function loginResponse(errText){
   const err = errText ? String(errText).replace(/</g,'&lt;') : '';
   const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8">
@@ -72,7 +94,7 @@ button:hover{transform:scale(1.02)}
 <input type="password" name="password" placeholder="Пароль" autofocus>
 <button type="submit">Войти</button>
 <div class="e">${err}</div></form></body></html>`;
-  return new Response(html, { status: errText ? 401 : 200, headers: { 'content-type':'text/html; charset=utf-8', 'cache-control':'no-store' } });
+  return new Response(html, { status: errText ? 401 : 200, headers: { 'content-type':'text/html; charset=utf-8', 'cache-control':'no-store', ...SEC_HEADERS } });
 }
 
 export default async function middleware(request){
@@ -84,6 +106,9 @@ export default async function middleware(request){
   }
 
   if(url.pathname === '/__auth' && request.method === 'POST'){
+    if(!(await checkAuthRateLimit(request))){
+      return new Response('Слишком много попыток. Подожди минуту.', { status: 429, headers: { 'content-type':'text/plain; charset=utf-8', 'cache-control':'no-store', ...SEC_HEADERS } });
+    }
     let entered = '';
     try { const form = await request.formData(); entered = String(form.get('password') || ''); } catch(e) {}
     if(entered === pass){
@@ -95,6 +120,7 @@ export default async function middleware(request){
       h.append('Set-Cookie', `site_auth=1; ${attr}`);
       h.set('Location', '/');
       h.set('cache-control', 'no-store');
+      for(const [k,v] of Object.entries(SEC_HEADERS)) h.set(k, v);
       return new Response(null, { status: 303, headers: h });
     }
     return loginResponse('Неверный пароль');
