@@ -36,6 +36,8 @@ export default async function handler(request){
 
     // Поддержка массового сидирования баз/переходов
     if(Array.isArray(body.seedBatch)){
+      // [L1] Лимит размера батча — защита от раздувания KV.
+      if(body.seedBatch.length > 2000) return jsonResp({error:'слишком большой батч (макс 2000)'}, 413);
       const arr = await readAll(kv);
       let changed = false;
       for(const sb of body.seedBatch){

@@ -105,6 +105,19 @@ export default async function middleware(request){
     return new Response('SITE_PASSWORD не задан. Заполните env-переменную проекта или site_password в Vercel KV.', { status: 500, headers: { 'content-type':'text/plain; charset=utf-8' } });
   }
 
+  // [L2] Выход: гасим обе cookie и возвращаем на экран пароля.
+  if(url.pathname === '/__logout'){
+    const secure = url.protocol === 'https:';
+    const clear = `Path=/; Max-Age=0; SameSite=Lax` + (secure ? '; Secure' : '');
+    const h = new Headers();
+    h.append('Set-Cookie', `${COOKIE}=; HttpOnly; ${clear}`);
+    h.append('Set-Cookie', `site_auth=; ${clear}`);
+    h.set('Location', '/');
+    h.set('cache-control', 'no-store');
+    for(const [k,v] of Object.entries(SEC_HEADERS)) h.set(k, v);
+    return new Response(null, { status: 303, headers: h });
+  }
+
   if(url.pathname === '/__auth' && request.method === 'POST'){
     if(!(await checkAuthRateLimit(request))){
       return new Response('Слишком много попыток. Подожди минуту.', { status: 429, headers: { 'content-type':'text/plain; charset=utf-8', 'cache-control':'no-store', ...SEC_HEADERS } });

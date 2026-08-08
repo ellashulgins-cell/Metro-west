@@ -111,8 +111,16 @@ export default async function handler(request){
     if(!kv) return jsonResp({error:'KV недоступен'}, 500);
     if(request.method === 'POST'){
       let body; try{ body = await request.json() }catch(e){ body = {} }
+      // [L1] Лимит размера батча — защита от раздувания KV огромным импортом.
+      if(Array.isArray(body.points) && body.points.length > 5000){
+        return jsonResp({error:'слишком большой батч (макс 5000 точек за раз)'}, 413);
+      }
       const list = (await kv.get('reroute_points')) || [];
       const arr = Array.isArray(list) ? list.slice() : [];
+      // [L1] Общий потолок хранилища reroute-точек.
+      if(arr.length >= 50000){
+        return jsonResp({error:'достигнут лимит хранилища reroute-точек (50000)'}, 413);
+      }
       const now = Date.now();
       const isBulk = Array.isArray(body.points);
       const trackId = 't' + now + '_' + Math.floor(Math.random()*1e6);
